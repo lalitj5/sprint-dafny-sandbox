@@ -39,7 +39,10 @@
 </head>
 <body>
     <div class="header">
-        <h1>Formal-Sweep Security Dashboard</h1>
+        <div>
+            <h1 style="display:inline; margin-right: 20px;">Formal-Sweep Security Dashboard</h1>
+            <select id="session-select" style="padding: 5px; font-size: 16px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;"></select>
+        </div>
         <div id="status">Live Status: Polling...</div>
     </div>
 
@@ -84,9 +87,54 @@
     </table>
 
     <script>
-        async function fetchLogs() {
+        let currentSession = null;
+
+        async function fetchSessions() {
             try {
-                const response = await fetch('/logs');
+                const response = await fetch('/sessions');
+                const sessions = await response.json();
+                
+                const select = document.getElementById('session-select');
+                
+                // Populate options if empty or changed
+                if (select.options.length !== sessions.length) {
+                    const currentVal = select.value;
+                    select.innerHTML = '';
+                    sessions.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s;
+                        opt.innerText = `Run: ${s.replace('_', ' ')}`;
+                        select.appendChild(opt);
+                    });
+                    if (currentVal && sessions.includes(currentVal)) {
+                        select.value = currentVal;
+                    }
+                }
+                
+                if (sessions.length > 0) {
+                    if (!currentSession) {
+                        currentSession = sessions[0]; // Default to newest run
+                        select.value = currentSession;
+                    }
+                    fetchLogs();
+                } else {
+                    document.getElementById('status').innerText = 'No runs found yet.';
+                    document.getElementById('status').style.color = '#ffbb33';
+                }
+            } catch (err) {
+                console.error("Failed to fetch sessions", err);
+            }
+        }
+
+        document.getElementById('session-select').addEventListener('change', (e) => {
+            currentSession = e.target.value;
+            fetchLogs(); // Instantly update when a new run is selected
+        });
+
+        async function fetchLogs() {
+            if (!currentSession) return;
+            try {
+                const response = await fetch(`/logs/${currentSession}`);
                 const logs = await response.json();
                 renderDashboard(logs);
                 document.getElementById('status').innerText = 'Live Status: Connected (Auto-refreshing)';
@@ -142,7 +190,7 @@
                 tooltip.innerHTML = `<strong>Cmd:</strong> <code>${log.raw_command}</code><br/><strong>Zone:</strong> ${log.translated_state.target_zone}`;
                 cell.appendChild(tooltip);
                 
-                // Keep chronological order for heatmap (reverse the reversed array)
+                // Keep chronological order for heatmap
                 heatmap.insertBefore(cell, heatmap.firstChild);
 
                 // Table Row
@@ -176,9 +224,9 @@
             document.getElementById('m-evaded').innerText = evaded;
         }
 
-        // Poll every 2 seconds
-        fetchLogs();
-        setInterval(fetchLogs, 2000);
+        // Poll sessions every 2 seconds (which in turn polls logs)
+        fetchSessions();
+        setInterval(fetchSessions, 2000);
     </script>
 </body>
 </html>
