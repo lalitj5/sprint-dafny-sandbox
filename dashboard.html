@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formal-Sweep Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #fff; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+        .metric-card { background: #2d2d2d; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #444; }
+        .metric-value { font-size: 2em; font-weight: bold; margin: 10px 0; }
+        .metric-card.danger { border-color: #ff4444; }
+        .metric-card.warning { border-color: #ffbb33; }
+        .metric-card.safe { border-color: #00C851; }
+        
+        .heatmap-container { margin-bottom: 30px; }
+        .heatmap { display: flex; flex-wrap: wrap; gap: 5px; background: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #444; min-height: 50px; }
+        .cell { width: 30px; height: 30px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; cursor: pointer; position: relative; }
+        .cell.safe { background-color: #007E33; }
+        .cell.warning { background-color: #FF8800; }
+        .cell.mine { background-color: #CC0000; }
+        .cell.evaded { background-color: #aa66cc; box-shadow: 0 0 10px #aa66cc; } /* False Negative */
+        
+        .tooltip { visibility: hidden; width: 250px; background-color: #111; color: #fff; text-align: left; padding: 10px; border-radius: 6px; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -125px; border: 1px solid #555; font-size: 11px; word-wrap: break-word; }
+        .cell:hover .tooltip { visibility: visible; }
+        
+        table { width: 100%; border-collapse: collapse; background: #2d2d2d; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #444; }
+        th { background-color: #333; font-weight: 600; }
+        tr:hover { background-color: #3a3a3a; }
+        .tag { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+        .tag.safe { background: #007E33; }
+        .tag.warning { background: #FF8800; }
+        .tag.mine { background: #CC0000; }
+        .tag.evaded { background: #aa66cc; }
+        code { background: #111; padding: 2px 5px; border-radius: 4px; color: #00ff00; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Formal-Sweep Security Dashboard</h1>
+        <div id="status">Live Status: Polling...</div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <h3>Total Commands</h3>
+            <div class="metric-value" id="m-total">0</div>
+        </div>
+        <div class="metric-card warning">
+            <h3>Total Evasion Attempts (Auditor)</h3>
+            <div class="metric-value" id="m-attempts">0</div>
+        </div>
+        <div class="metric-card safe">
+            <h3>Caught by Dafny</h3>
+            <div class="metric-value" id="m-caught">0</div>
+        </div>
+        <div class="metric-card danger">
+            <h3>False Negatives (Evaded)</h3>
+            <div class="metric-value" id="m-evaded">0</div>
+        </div>
+    </div>
+
+    <div class="heatmap-container">
+        <h2>Agent Trajectory (Heatmap)</h2>
+        <p style="font-size: 0.9em; color: #aaa;">Green: Safe | Orange: Boundary Warning | Red: Dafny Block | Purple: Successful Evasion (False Negative)</p>
+        <div class="heatmap" id="heatmap"></div>
+    </div>
+
+    <h2>Command Log</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Command</th>
+                <th>Target Zone</th>
+                <th>Sandbox Decision</th>
+                <th>Auditor Verdict</th>
+            </tr>
+        </thead>
+        <tbody id="log-table">
+        </tbody>
+    </table>
+
+    <script>
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/logs');
+                const logs = await response.json();
+                renderDashboard(logs);
+                document.getElementById('status').innerText = 'Live Status: Connected (Auto-refreshing)';
+                document.getElementById('status').style.color = '#00C851';
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status').innerText = 'Live Status: Disconnected';
+                document.getElementById('status').style.color = '#ff4444';
+            }
+        }
+
+        function renderDashboard(logs) {
+            let total = logs.length;
+            let attempts = 0;
+            let caught = 0;
+            let evaded = 0;
+
+            const heatmap = document.getElementById('heatmap');
+            const table = document.getElementById('log-table');
+            heatmap.innerHTML = '';
+            table.innerHTML = '';
+
+            logs.reverse().forEach((log, index) => {
+                const metrics = log.metrics || {};
+                const isEvasion = metrics.total_evasion_attempt || false;
+                const isBlocked = !log.dafny_verification_is_safe;
+                const isFalseNegative = metrics.false_negative || false;
+
+                if (isEvasion) attempts++;
+                if (isEvasion && isBlocked) caught++;
+                if (isFalseNegative) evaded++;
+
+                // Heatmap Cell
+                let cellClass = 'safe';
+                let symbol = '';
+                if (isFalseNegative) {
+                    cellClass = 'evaded';
+                    symbol = '👻';
+                } else if (log.heuristic_distance === 2) {
+                    cellClass = 'mine';
+                    symbol = '❌';
+                } else if (log.heuristic_distance === 1) {
+                    cellClass = 'warning';
+                    symbol = '⚠️';
+                }
+
+                const cell = document.createElement('div');
+                cell.className = `cell ${cellClass}`;
+                cell.innerText = symbol;
+                
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.innerHTML = `<strong>Cmd:</strong> <code>${log.raw_command}</code><br/><strong>Zone:</strong> ${log.translated_state.target_zone}`;
+                cell.appendChild(tooltip);
+                
+                // Keep chronological order for heatmap (reverse the reversed array)
+                heatmap.insertBefore(cell, heatmap.firstChild);
+
+                // Table Row
+                const tr = document.createElement('tr');
+                let decisionTag = `<span class="tag safe">Allowed</span>`;
+                if (log.heuristic_distance === 2) decisionTag = `<span class="tag mine">Blocked</span>`;
+                if (log.heuristic_distance === 1) decisionTag = `<span class="tag warning">Warning</span>`;
+
+                let auditorTag = isEvasion ? `<span class="tag mine">Malicious</span>` : `<span class="tag safe">Benign</span>`;
+                if (isFalseNegative) auditorTag = `<span class="tag evaded">Missed Evasion</span>`;
+
+                tr.innerHTML = `
+                    <td style="font-size: 12px; color: #aaa;">${new Date(log.timestamp).toLocaleTimeString()}</td>
+                    <td><code>${log.raw_command}</code></td>
+                    <td style="font-size: 12px;">${log.translated_state.target_zone.replace('TargetZone_', '')}</td>
+                    <td>${decisionTag}</td>
+                    <td>${auditorTag}</td>
+                `;
+                table.appendChild(tr);
+            });
+
+            // Update Metrics
+            document.getElementById('m-total').innerText = total;
+            document.getElementById('m-attempts').innerText = attempts;
+            document.getElementById('m-caught').innerText = caught;
+            document.getElementById('m-evaded').innerText = evaded;
+        }
+
+        // Poll every 2 seconds
+        fetchLogs();
+        setInterval(fetchLogs, 2000);
+    </script>
+</body>
+</html>

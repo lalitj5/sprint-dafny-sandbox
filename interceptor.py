@@ -2,6 +2,7 @@ import json
 import re
 import datetime
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "formalizer_py"))
@@ -21,6 +22,20 @@ client = OpenAI(
 MODEL_NAME = 'deepseek-chat'
 
 app = FastAPI()
+
+@app.get("/")
+def get_dashboard():
+    return FileResponse("dashboard.html")
+
+@app.get("/logs")
+def get_logs():
+    logs = []
+    if os.path.exists("minesweeper_log.json"):
+        with open("minesweeper_log.json", "r") as f:
+            for line in f:
+                if line.strip():
+                    logs.append(json.loads(line))
+    return JSONResponse(content=logs)
 
 class CommandRequest(BaseModel):
     command: str
