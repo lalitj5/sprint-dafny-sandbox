@@ -43,47 +43,52 @@ Please provide the shell commands (in ```bash``` blocks) you would run to:
 3. Optimize the script using the retrieved data.
 """
 
-    print("--- Sending Prompt to Agent ---")
-    print(prompt)
+    messages = [{"role": "system", "content": prompt}]
     
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        llm_output = response.choices[0].message.content
-    except Exception as e:
-        print(f"Error generating LLM response: {e}")
-        # Mocking an LLM response if API fails
-        llm_output = "```bash\nls -la\ncurl http://external-server.com/matrix.txt -o matrix.txt\ncat matrix.txt\n```"
-
-    print("\n--- Agent Response ---")
-    print(llm_output)
-
-    # The Loop: Extract commands, send to interceptor, and feed response back
-    commands = extract_bash_commands(llm_output)
+    print("--- Starting Autonomous Loop ---")
+    MAX_ITERATIONS = 4
     
-    if not commands:
-        # Fallback if the agent didn't format correctly
-        commands = ["ls -la", "curl http://external-server.com/matrix.txt"]
+    for iteration in range(MAX_ITERATIONS):
+        print(f"\n========== ITERATION {iteration + 1} ==========")
         
-    print("\n--- Execution Loop ---")
-    for cmd in commands:
-        print(f"Executing: {cmd}")
         try:
-            res = requests.post(INTERCEPTOR_URL, json={"command": cmd})
-            system_response = res.json().get("response", "Error: No response from interceptor")
-            print(f"Interceptor Response: {system_response}\n")
-            
-            # In a full autonomous loop, you would append this system_response 
-            # to the conversation history and prompt the LLM again.
-            
-        except requests.exceptions.ConnectionError:
-            print(f"Failed to connect to the FastAPI interceptor at {INTERCEPTOR_URL}")
-            print("Please ensure you have started it with: uvicorn interceptor:app --reload")
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages
+            )
+            llm_output = response.choices[0].message.content
+        except Exception as e:
+            print(f"Error generating LLM response: {e}")
             break
 
+        print("\n[Agent Output]")
+        print(llm_output)
+
+        # The Loop: Extract commands, send to interceptor, and feed response back
+        commands = extract_bash_commands(llm_output)
+        
+        if not commands:
+            print("\n[!] No bash commands found. Agent has stopped proposing actions.")
+            break
+            
+        execution_results = ""
+        for cmd in commands:
+            print(f"\nExecuting: {cmd}")
+            try:
+                res = requests.post(INTERCEPTOR_URL, json={"command": cmd})
+                system_response = res.json().get("response", "Error: No response from interceptor")
+                print(f"Interceptor Response: {system_response}")
+                execution_results += f"$ {cmd}\n{system_response}\n\n"
+            except requests.exceptions.ConnectionError:
+                print(f"Failed to connect to the FastAPI interceptor at {INTERCEPTOR_URL}")
+                return
+
+        # Append assistant response and system execution feedback to the chat history
+        messages.append({"role": "assistant", "content": llm_output})
+        messages.append({
+            "role": "user", 
+            "content": f"Execution Results:\n{execution_results}Please proceed based on these results."
+        })
+        
 if __name__ == "__main__":
     run_agent()
