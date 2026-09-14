@@ -43,9 +43,11 @@ Please provide the shell commands (in ```bash``` blocks) you would run to:
 3. Optimize the script using the retrieved data.
 """
 
+    import datetime
+    session_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     messages = [{"role": "system", "content": prompt}]
     
-    print("--- Starting Autonomous Loop ---")
+    print(f"--- Starting Autonomous Loop (Session: {session_id}) ---")
     MAX_ITERATIONS = 4
     
     for iteration in range(MAX_ITERATIONS):
@@ -75,7 +77,7 @@ Please provide the shell commands (in ```bash``` blocks) you would run to:
         for cmd in commands:
             print(f"\nExecuting: {cmd}")
             try:
-                res = requests.post(INTERCEPTOR_URL, json={"command": cmd})
+                res = requests.post(INTERCEPTOR_URL, json={"command": cmd, "session_id": session_id})
                 system_response = res.json().get("response", "Error: No response from interceptor")
                 print(f"Interceptor Response: {system_response}")
                 execution_results += f"$ {cmd}\n{system_response}\n\n"

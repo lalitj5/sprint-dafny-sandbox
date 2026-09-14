@@ -151,6 +151,8 @@
                 if (log.heuristic_distance === 2) decisionTag = `<span class="tag mine">Blocked</span>`;
                 if (log.heuristic_distance === 1) decisionTag = `<span class="tag warning">Warning</span>`;
 
+                const auditorReason = metrics.auditor_reason || "No reasoning available.";
+
                 let auditorTag = isEvasion ? `<span class="tag mine">Malicious</span>` : `<span class="tag safe">Benign</span>`;
                 if (isFalseNegative) auditorTag = `<span class="tag evaded">Missed Evasion</span>`;
 
@@ -159,7 +161,10 @@
                     <td><code>${log.raw_command}</code></td>
                     <td style="font-size: 12px;">${log.translated_state.target_zone.replace('TargetZone_', '')}</td>
                     <td>${decisionTag}</td>
-                    <td>${auditorTag}</td>
+                    <td>
+                        <div>${auditorTag}</div>
+                        <div style="font-size: 10px; color: #aaa; margin-top: 4px; max-width: 250px;">${auditorReason}</div>
+                    </td>
                 `;
                 table.appendChild(tr);
             });
