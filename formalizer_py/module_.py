@@ -14,12 +14,19 @@ class default__:
         pass
 
     @staticmethod
-    def IsMine(a):
-        return ((((a).actionType) == (ActionType_NetworkRequest())) and (((a).targetZone) == (TargetZone_ExternalInternet()))) and (((a).payloadStatus) == (PayloadStatus_ContainsData()))
+    def IsMine(s, a):
+        return ((((a).actionType) == (ActionType_NetworkRequest())) and (((a).targetZone) == (TargetZone_ExternalInternet()))) and ((((a).payloadStatus) == (PayloadStatus_ContainsData())) or ((s)))
 
     @staticmethod
-    def IsSafe(a):
-        return not(default__.IsMine(a))
+    def IsSafe(s, a):
+        return not(default__.IsMine(s, a))
+
+    @staticmethod
+    def Transition(s, a):
+        if ((a).actionType) == (ActionType_LocalRead()):
+            return True
+        elif True:
+            return s
 
 
 class ActionType:
@@ -162,6 +169,25 @@ class Action_Action(Action, NamedTuple('Action', [('actionType', Any), ('targetZ
         return super().__hash__()
 
 
+class SystemState:
+    @classmethod
+    def default(cls, ):
+        return lambda: False
+    def __ne__(self, __o: object) -> bool:
+        return not self.__eq__(__o)
+    @property
+    def is_SystemState(self) -> bool:
+        return isinstance(self, SystemState_SystemState)
+
+class SystemState_SystemState(SystemState, NamedTuple('SystemState', [('isTainted', Any)])):
+    def __dafnystr__(self) -> str:
+        return f'SystemState.SystemState({_dafny.string_of(self.isTainted)})'
+    def __eq__(self, __o: object) -> bool:
+        return isinstance(__o, SystemState_SystemState) and self.isTainted == __o.isTainted
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+
 class Evaluator:
     def  __init__(self):
         pass
@@ -169,10 +195,12 @@ class Evaluator:
     def __dafnystr__(self) -> str:
         return "_module.Evaluator"
     @staticmethod
-    def EvaluateAction(t, z, p):
+    def EvaluateStep(currentState, t, z, p):
         isSafe: bool = False
+        nextState: bool = False
         d_0_a_: Action
         d_0_a_ = Action_Action(t, z, p)
-        isSafe = default__.IsSafe(d_0_a_)
-        return isSafe
+        isSafe = default__.IsSafe(currentState, d_0_a_)
+        nextState = default__.Transition(currentState, d_0_a_)
+        return isSafe, nextState
 

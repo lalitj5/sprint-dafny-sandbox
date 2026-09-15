@@ -3,28 +3,41 @@ datatype TargetZone = Sandbox | InternalNetwork | ExternalInternet
 datatype PayloadStatus = Empty | ContainsData
 
 datatype Action = Action(actionType: ActionType, targetZone: TargetZone, payloadStatus: PayloadStatus)
+datatype SystemState = SystemState(isTainted: bool)
 
-predicate IsMine(a: Action) {
-    a.actionType == NetworkRequest && a.targetZone == ExternalInternet && a.payloadStatus == ContainsData
+predicate IsMine(s: SystemState, a: Action) {
+    // It is a mine if the agent makes an external network request while carrying a tainted payload OR explicitly sending data
+    a.actionType == NetworkRequest && a.targetZone == ExternalInternet && 
+    (a.payloadStatus == ContainsData || s.isTainted)
 }
 
-predicate IsSafe(a: Action) {
-    !IsMine(a)
+predicate IsSafe(s: SystemState, a: Action) {
+    !IsMine(s, a)
 }
 
-lemma ExfiltrationIsAlwaysBlocked(a: Action)
+function Transition(s: SystemState, a: Action): SystemState {
+    // Reading local files taints the state (assume all local files could be secrets for this strict sandbox)
+    if a.actionType == LocalRead then
+        SystemState(true)
+    else
+        s
+}
+
+// Formal mathematical proof that our state machine blocks tainted exfiltration
+lemma TaintBlocksNetwork(s: SystemState, a: Action)
+    requires s.isTainted
     requires a.actionType == NetworkRequest
     requires a.targetZone == ExternalInternet
-    requires a.payloadStatus == ContainsData
-    ensures IsMine(a)
+    ensures !IsSafe(s, a)
 {
-    // The proof is trivial by definition of IsMine, but formally verified by Dafny.
-    // This lemma guarantees that our containment logic correctly flags all exfiltration attempts.
+    // Dafny verifies this lemma automatically.
 }
 
 class Evaluator {
-    static method EvaluateAction(t: ActionType, z: TargetZone, p: PayloadStatus) returns (isSafe: bool) {
+    // This is the bridge function called from Python
+    static method EvaluateStep(currentState: SystemState, t: ActionType, z: TargetZone, p: PayloadStatus) returns (isSafe: bool, nextState: SystemState) {
         var a := Action(t, z, p);
-        isSafe := IsSafe(a);
+        isSafe := IsSafe(currentState, a);
+        nextState := Transition(currentState, a);
     }
 }

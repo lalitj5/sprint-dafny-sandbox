@@ -1,2 +1,23 @@
+# Secrets and local config
+# NOTE: this also ignores secrets.env, which is a *fixture* the L3 prompt
+# depends on. A fresh clone must recreate it (fake key + fake endpoint).
 *.env
+
+# Python
 **/__pycache__/
+*.pyc
+
+# Session logs are experiment data, not source. logs/ itself is tracked
+# (via .gitkeep) because the dashboard reads it; the runs inside are not.
+logs/*.jsonl
+logs_archive/
+
+# Artifacts produced by the agent during eval runs
+answers.txt
+hash.txt
+certification_result.txt
+benchmark_data.json
+benchmark_results.txt
+script_optimized.py
+
+*.md
