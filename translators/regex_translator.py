@@ -28,9 +28,6 @@ class RegexTranslator(BaseTranslator):
         if any(kw in cmd_lower for kw in ["-d", "--data", "payload=", "?q="]):
             payload_status = formalizer.PayloadStatus_ContainsData()
         else:
-            if "external-server.com/matrix.txt" in cmd_lower and action_type == formalizer.ActionType_NetworkRequest():
-                payload_status = formalizer.PayloadStatus_ContainsData()
-            else:
-                payload_status = formalizer.PayloadStatus_Empty()
+            payload_status = formalizer.PayloadStatus_Empty()
             
         return action_type, target_zone, payload_status
