@@ -10,8 +10,6 @@
 logs/*.jsonl
 logs_archive/
 
-*.md
-
 # Canary hit records and per-session workdir snapshots (run data, not source)
 logs/canary/
 logs/workdir_*/
